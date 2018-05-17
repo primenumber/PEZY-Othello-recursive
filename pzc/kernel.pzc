@@ -1,0 +1,152 @@
+#include "pzc_builtin.h"
+#include "../common/pzcperf.h"
+#include "../types.hpp"
+
+signed char max(signed char x, signed char y) {
+  if (y > x) return y;
+  else return x;
+}
+
+int popcnt(uint64_t x) {
+  x = ((x & UINT64_C(0xAAAAAAAAAAAAAAAA)) >>  1) + (x & UINT64_C(0x5555555555555555));
+  x = ((x & UINT64_C(0xCCCCCCCCCCCCCCCC)) >>  2) + (x & UINT64_C(0x3333333333333333));
+  x = ((x & UINT64_C(0xF0F0F0F0F0F0F0F0)) >>  4) + (x & UINT64_C(0x0F0F0F0F0F0F0F0F));
+  x = ((x & UINT64_C(0xFF00FF00FF00FF00)) >>  8) + (x & UINT64_C(0x00FF00FF00FF00FF));
+  x = ((x & UINT64_C(0xFFFF0000FFFF0000)) >> 16) + (x & UINT64_C(0x0000FFFF0000FFFF));
+  return ((x >> 32) + x) & UINT64_C(0x00000000FFFFFFFF);
+}
+
+int score(const Board& bd) {
+  int me = popcnt(bd.me);
+  int op = popcnt(bd.op);
+  if (me == op) return 0;
+  if (me > op) return 64 - 2*op;
+  else return -64 + 2*me;
+}
+
+uint64_t empty(const Board& bd) {
+  return ~(bd.me | bd.op);
+}
+
+uint64_t upper_bit(uint64_t x) {
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  x |= x >> 32;
+  return x & ~(x >> 1);
+}
+
+template <int simd_index>
+uint64_t flip_impl(const Board& bd, int pos) {
+  uint64_t OM = bd.op;
+  if (simd_index) OM &= UINT64_C(0x7E7E7E7E7E7E7E7E);
+  constexpr uint64_t mask1[] = {
+    UINT64_C(0x0080808080808080),
+    UINT64_C(0x7F00000000000000),
+    UINT64_C(0x0102040810204000),
+    UINT64_C(0x0040201008040201)
+  };
+  uint64_t mask = mask1[simd_index] >> (63 - pos);
+  uint64_t outflank = upper_bit(~OM & mask) & bd.me;
+  uint64_t flipped = (-outflank << 1) & mask;
+  constexpr uint64_t mask2[] = {
+    UINT64_C(0x0101010101010100),
+    UINT64_C(0x00000000000000FE),
+    UINT64_C(0x0002040810204080),
+    UINT64_C(0x8040201008040200)
+  };
+  mask = mask2[simd_index] << pos;
+  outflank = mask & ((OM | ~mask) + 1) & bd.me;
+  flipped |= (outflank - (outflank != 0)) & mask;
+  return flipped;
+}
+
+uint64_t flip(const Board& bd, int pos) {
+  return flip_impl<0>(bd, pos) | flip_impl<1>(bd, pos) | flip_impl<2>(bd, pos) | flip_impl<3>(bd, pos);
+}
+
+Board move(const Board& bd, uint64_t flips, int pos) {
+  return Board(bd.op ^ flips, (bd.me ^ flips) | (UINT64_C(1) << pos));
+}
+
+Board unmove(const Board& bd, uint64_t flips, int pos) {
+  return Board(bd.op ^ flips ^ (UINT64_C(1) << pos), bd.me ^ flips);
+}
+
+Board move_pass(const Board& bd) {
+  return Board(bd.op, bd.me);
+}
+
+Board unmove_pass(const Board &bd) {
+  return Board(bd.op, bd.me);
+}
+
+struct Search {
+  Board bd;
+  signed char alpha_beta(int depth, signed char alpha, signed char beta, bool passed_prev = false) {
+    if (depth == 0) return score(bd);
+    signed char result = -64;
+    bool pass = true;
+    uint64_t bits = empty(bd);
+    for (; bits; bits &= bits-1) {
+      uint64_t flips;
+      int pos;
+      {
+        uint64_t bit = bits & -bits;
+        pos = popcnt(bit - 1);
+        flips = flip(bd, pos);
+      }
+      if (flips) {
+        pass = false;
+        bd = move(bd, flips, pos);
+        result = max(result, -alpha_beta(depth-1, -beta, -alpha));
+        bd = unmove(bd, flips, pos);
+        if (result >= beta) return result;
+        alpha = max(alpha, result);
+      }
+    }
+    if (pass) {
+      if (passed_prev) {
+        return score(bd);
+      } else {
+        bd = move_pass(bd);
+        result = -alpha_beta(depth-1, -beta, -alpha, true);
+        bd = unmove_pass(bd);
+      }
+    }
+    return result;
+  }
+};
+
+constexpr int MaxPerf = 4;
+PZCPerformance gPerf[MaxPerf];
+
+void pzc_Solve(const AlphaBetaProblem * const problems, int32_t * const results, const size_t n, char * const stack_area) {
+  //if (get_tid() >= 4) return;
+  const size_t offset = get_pid() * get_maxtid() + get_tid();
+  // constexpr size_t stack_size = 16384;
+  // char * const local_stack = stack_area + stack_size * offset;
+  // const int local_stack_addr = (int64_t)local_stack + stack_size;
+  // asm volatile ("i.mov sp %0" :: "r"(local_stack_addr));
+  PZCPerformance stc, etc;
+  for (size_t i = offset; i < n; i += get_maxpid() * get_maxtid()) {
+    const AlphaBetaProblem& abp = problems[i];
+    Search search = {abp.bd};
+    stc.Update();
+    results[i] = search.alpha_beta(5, abp.alpha, abp.beta);
+    etc.Update();
+    if (i < MaxPerf) gPerf[i] = etc - stc;
+  }
+  flush();
+}
+
+void pzc_GetPerformance(PZCPerformance *out) {
+  if (get_tid() > 0 || get_pid() > 0) return;
+  for (int i = 0; i < MaxPerf; ++i) {
+    out[i] = gPerf[i];
+    gPerf[i].Clear();
+  }
+  flush();
+}
