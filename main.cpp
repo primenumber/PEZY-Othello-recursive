@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
   std::vector<int32_t> results(N);
   result = clEnqueueReadBuffer(command_queue, memRes, CL_TRUE, 0, sizeof(int32_t)*N, results.data(), 0, nullptr, nullptr);
   if (result != CL_SUCCESS) {
-    std::cerr << "kernel launch error: " << getErrorString(result) << std::endl;
+    std::cerr << "read buffer error: " << getErrorString(result) << std::endl;
   }
   auto end = std::chrono::system_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
