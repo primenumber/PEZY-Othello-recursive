@@ -1,4 +1,5 @@
 #include "pzc_builtin.h"
+#include "pzc_atomic.h"
 #include "../types.hpp"
 
 signed char max(signed char x, signed char y) {
@@ -88,55 +89,121 @@ Board unmove_pass(const Board &bd) {
   return Board(bd.op, bd.me);
 }
 
-struct Search {
-  Board bd;
-  signed char alpha_beta(int depth, signed char alpha, signed char beta, bool passed_prev = false) {
-    if (depth == 0) return score(bd);
-    signed char result = -64;
-    bool pass = true;
-    uint64_t bits = empty(bd);
-    for (; bits; bits &= bits-1) {
-      uint64_t flips;
-      int pos;
-      {
-        uint64_t bit = bits & -bits;
-        pos = popcnt(bit - 1);
-        flips = flip(bd, pos);
-      }
-      if (flips) {
-        pass = false;
-        bd = move(bd, flips, pos);
-        result = max(result, -alpha_beta(depth-1, -beta, -alpha));
-        bd = unmove(bd, flips, pos);
-        if (result >= beta) return result;
-        alpha = max(alpha, result);
-      }
-    }
-    if (pass) {
-      if (passed_prev) {
-        return score(bd);
-      } else {
-        bd = move_pass(bd);
-        result = -alpha_beta(depth-1, -beta, -alpha, true);
-        bd = unmove_pass(bd);
-      }
-    }
-    return result;
-  }
-};
+signed char alpha_beta(
+    Board bd, signed char alpha, signed char beta, bool passed_prev = false);
 
-void pzc_Solve(const AlphaBetaProblem * const problems, int32_t * const results, const size_t n, char * const stack_area) {
-  //if (get_tid() >= 4) return;
-  const size_t offset = get_pid() * get_maxtid() + get_tid();
-  // constexpr size_t stack_size = 16384;
-  // char * const local_stack = stack_area + stack_size * offset;
-  // const int local_stack_addr = (int64_t)local_stack + stack_size;
-  // asm volatile ("i.mov sp %0" :: "r"(local_stack_addr));
-  for (size_t i = offset; i < n; i += get_maxpid() * get_maxtid()) {
+signed char alpha_beta_naive(Board bd, signed char alpha, signed char beta, bool passed_prev = false) {
+  signed char result = -64;
+  bool pass = true;
+  for (uint64_t bits = empty(bd); bits; bits &= bits-1) {
+    uint64_t bit = bits & -bits;
+    int pos = ctz(bit);
+    uint64_t flips = flip(bd, pos);
+    if (flips) {
+      pass = false;
+      Board next = move(bd, flips, pos);
+      result = max(result, -alpha_beta_naive(next, -beta, -alpha));
+      if (result >= beta) return result;
+      alpha = max(alpha, result);
+    }
+  }
+  if (pass) {
+    if (passed_prev) {
+      return score(bd);
+    } else {
+      Board next = move_pass(bd);
+      result = -alpha_beta_naive(next, -beta, -alpha, true);
+    }
+  }
+  return result;
+}
+
+void swap(char &x, char &y) {
+  char tmp = x;
+  x = y;
+  y = tmp;
+}
+
+void sort_by_key(char *values, char *keys, const int count) {
+  for (int i = 1; i < count; ++i) {
+    int j = i;
+    while (keys[j] < keys[j-1]) {
+      swap(keys[j], keys[j-1]);
+      swap(values[j], values[j-1]);
+      --j;
+      if (j <= 0) break;
+    }
+  }
+}
+
+__attribute__((noinline)) uint64_t mobility_num(const Board bd) {
+  int count = 0;
+  for (uint64_t bits = empty(bd); bits; bits &= bits-1) {
+    uint64_t bit = bits & -bits;
+    int pos = ctz(bit);
+    uint64_t flips = flip(bd, pos);
+    if (flips) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+constexpr size_t max_mobility = 10;
+signed char alpha_beta_fastest_first(
+    Board bd, signed char alpha, signed char beta, bool passed_prev = false) {
+  char pos_ary[max_mobility];
+  char cnt_ary[max_mobility];
+  int mobility_count = 0;
+  for (uint64_t bits = empty(bd); bits; bits &= bits-1) {
+    uint64_t bit = bits & -bits;
+    int pos = ctz(bit);
+    uint64_t flips = flip(bd, pos);
+    if (flips) {
+      Board next = move(bd, flips, pos);
+      pos_ary[mobility_count] = pos;
+      cnt_ary[mobility_count] = mobility_num(next);
+      ++mobility_count;
+    }
+  }
+  sort_by_key(pos_ary, cnt_ary, mobility_count);
+  signed char result = -64;
+  bool pass = true;
+  for (size_t i = 0; i < mobility_count; ++i) {
+    int pos = pos_ary[i];
+    uint64_t flips = flip(bd, pos);
+    if (flips) {
+      pass = false;
+      Board next = move(bd, flips, pos);
+      result = max(result, -alpha_beta(next, -beta, -alpha));
+      if (result >= beta) return result;
+      alpha = max(alpha, result);
+    }
+  }
+  if (pass) {
+    if (passed_prev) {
+      return score(bd);
+    } else {
+      Board next = move_pass(bd);
+      result = -alpha_beta(next, -beta, -alpha, true);
+    }
+  }
+  return result;
+}
+
+signed char alpha_beta(
+    Board bd, signed char alpha, signed char beta, bool passed_prev) {
+  if (popcnt(empty(bd)) <= 6) return alpha_beta_naive(bd, alpha, beta, passed_prev);
+  else return alpha_beta_fastest_first(bd, alpha, beta, passed_prev);
+}
+
+void pzc_Solve(
+    const AlphaBetaProblem * const problems, int32_t * const results,
+    const size_t n, size_t *global_index) {
+  for (size_t i = pz_atomic_add(global_index, 1); i < n;
+      i = pz_atomic_add(global_index, 1)) {
     const AlphaBetaProblem& abp = problems[i];
-    Search search = {abp.bd};
-    results[i] = search.alpha_beta(5, abp.alpha, abp.beta);
+    results[i] = alpha_beta(abp.bd, abp.alpha, abp.beta);
   }
   flush();
 }
-
