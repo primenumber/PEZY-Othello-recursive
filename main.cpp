@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
 
   std::cerr << "load program" << std::endl;
   unsigned char *binary = (unsigned char *)malloc(MAX_BIN_SIZE * sizeof(char));
-  FILE *fp = fopen("kernel.sc1-64/kernel.pz", "rb");
+  FILE *fp = fopen("kernel.sc2/kernel.pz", "rb");
   std::size_t size = fread(binary, sizeof(char), MAX_BIN_SIZE, fp);
   fclose(fp);
 
