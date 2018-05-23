@@ -27,14 +27,20 @@ uint64_t empty(const Board& bd) {
   return ~(bd.me | bd.op);
 }
 
-uint64_t upper_bit(uint64_t x) {
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  x |= x >> 32;
-  return x & ~(x >> 1);
+inline unsigned int clz(uint64_t x) {
+  unsigned int res;
+  asm("i64.clz.u32 %0, %1": "=r"(res): "r"(x));
+  return res;
+}
+
+inline unsigned int ctz(uint64_t x) {
+  unsigned int res;
+  asm("i64.ctz.u32 %0, %1": "=r"(res): "r"(x));
+  return res;
+}
+
+inline uint64_t upper_bit(uint64_t x) {
+  return x ? UINT64_C(1) << (63 - clz(x)) : 0;
 }
 
 template <int simd_index>
