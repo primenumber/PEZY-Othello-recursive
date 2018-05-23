@@ -264,7 +264,7 @@ int main(int argc, char **argv) {
   std::cerr << "create buffer" << std::endl;
   cl_mem memProb = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(AlphaBetaProblem)*N, nullptr, &result);
   cl_mem memRes = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int32_t)*N, nullptr, &result);
-  size_t global_work_size = 8192; // max size
+  size_t global_work_size = 15872; // max size
   cl_mem memStack = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(char)*global_work_size*16384, nullptr, &result);
 
   clEnqueueWriteBuffer(command_queue, memProb, CL_TRUE, 0, sizeof(AlphaBetaProblem)*N, problems.data(), 0, nullptr, nullptr);
