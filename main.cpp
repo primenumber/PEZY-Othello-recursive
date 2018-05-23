@@ -10,7 +10,6 @@
 #include <omp.h>
 #include <PZSDKHelper.h>
 #include <pzcl/pzcl_ocl_wrapper.h>
-#include "common/pzcperf.h"
 #include "types.hpp"
 #include "to_board.hpp"
 
@@ -297,19 +296,6 @@ int main(int argc, char **argv) {
   auto end = std::chrono::system_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
   std::cerr << "elapsed: " << elapsed << std::endl;
-
-  cl_mem memProf = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(PZCPerformance) * 4, nullptr, &result);
-  clSetKernelArg(get_perf_kernel, 0, sizeof(cl_mem), (void *)&memProf);
-  result = clEnqueueNDRangeKernel(command_queue, get_perf_kernel, 1, nullptr, &global_work_size, nullptr, 0, nullptr, nullptr);
-  if (result != CL_SUCCESS) {
-    std::cerr << "kernel launch error: " << getErrorString(result) << std::endl;
-  }
-  PZCPerformance pperf[4];
-  result = clEnqueueReadBuffer(command_queue, memProf, CL_TRUE, 0, sizeof(PZCPerformance)*4, &(pperf[0]), 0, nullptr, nullptr);
-  
-  for (int i = 0; i < 4; ++i) {
-    std::cerr << "Perf: " << pperf[i].Perf() << ", Stall: " << pperf[i].Stall() << ", Wait: " << pperf[i].Wait() << std::endl;
-  }
 
   std::ofstream ofs(argv[2]);
   ofs << N << '\n';
