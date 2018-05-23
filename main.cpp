@@ -265,7 +265,6 @@ int main(int argc, char **argv) {
   cl_mem memProb = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(AlphaBetaProblem)*N, nullptr, &result);
   cl_mem memRes = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int32_t)*N, nullptr, &result);
   size_t global_work_size = 15872; // max size
-  cl_mem memStack = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(char)*global_work_size*16384, nullptr, &result);
 
   clEnqueueWriteBuffer(command_queue, memProb, CL_TRUE, 0, sizeof(AlphaBetaProblem)*N, problems.data(), 0, nullptr, nullptr);
 
@@ -279,7 +278,6 @@ int main(int argc, char **argv) {
   clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&memProb);
   clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&memRes);
   clSetKernelArg(kernel, 2, sizeof(size_t), (void *)&N);
-  clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&memStack);
   
   std::cerr << "start" << std::endl;
   auto start = std::chrono::system_clock::now();
@@ -318,7 +316,6 @@ int main(int argc, char **argv) {
   clReleaseProgram(program);
   clReleaseMemObject(memProb);
   clReleaseMemObject(memRes);
-  clReleaseMemObject(memStack);
   clReleaseCommandQueue(command_queue);
   clReleaseContext(context);
 
