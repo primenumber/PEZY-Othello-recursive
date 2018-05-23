@@ -264,9 +264,12 @@ int main(int argc, char **argv) {
   std::cerr << "create buffer" << std::endl;
   cl_mem memProb = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(AlphaBetaProblem)*N, nullptr, &result);
   cl_mem memRes = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int32_t)*N, nullptr, &result);
+  cl_mem memIndex = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(size_t), nullptr, &result);
   size_t global_work_size = 15872; // max size
 
   clEnqueueWriteBuffer(command_queue, memProb, CL_TRUE, 0, sizeof(AlphaBetaProblem)*N, problems.data(), 0, nullptr, nullptr);
+  size_t zero = 0;
+  clEnqueueWriteBuffer(command_queue, memIndex, CL_TRUE, 0, sizeof(size_t), &zero, 0, nullptr, nullptr);
 
   pfnPezyExtSetPerThreadStackSize clExtSetPerThreadStackSize = (pfnPezyExtSetPerThreadStackSize)clGetExtensionFunctionAddress("pezy_set_per_thread_stack_size");
   constexpr size_t per_thread_stack = 0x0A00; // 2.5KB;
@@ -278,6 +281,7 @@ int main(int argc, char **argv) {
   clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&memProb);
   clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&memRes);
   clSetKernelArg(kernel, 2, sizeof(size_t), (void *)&N);
+  clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&memIndex);
   
   std::cerr << "start" << std::endl;
   auto start = std::chrono::system_clock::now();
@@ -310,12 +314,14 @@ int main(int argc, char **argv) {
     diff += abs(results[i] - answer);
     omp_unset_lock(&write_lock);
   }
+  omp_destroy_lock(&write_lock);
   std::cerr << "diff: " << diff << std::endl;
 
   clReleaseKernel(kernel);
   clReleaseProgram(program);
   clReleaseMemObject(memProb);
   clReleaseMemObject(memRes);
+  clReleaseMemObject(memIndex);
   clReleaseCommandQueue(command_queue);
   clReleaseContext(context);
 
