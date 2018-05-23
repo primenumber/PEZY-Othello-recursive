@@ -269,12 +269,12 @@ int main(int argc, char **argv) {
 
   clEnqueueWriteBuffer(command_queue, memProb, CL_TRUE, 0, sizeof(AlphaBetaProblem)*N, problems.data(), 0, nullptr, nullptr);
 
-  // pfnPezyExtSetPerThreadStackSize clExtSetPerThreadStackSize = (pfnPezyExtSetPerThreadStackSize)clGetExtensionFunctionAddress("pezy_set_per_thread_stack_size");
-  // constexpr size_t per_thread_stack = 0x0800;
-  // result = clExtSetPerThreadStackSize(kernel, per_thread_stack);
-  // if (result != CL_SUCCESS) {
-  //   std::cerr << getErrorString(result) << std::endl;
-  // }
+  pfnPezyExtSetPerThreadStackSize clExtSetPerThreadStackSize = (pfnPezyExtSetPerThreadStackSize)clGetExtensionFunctionAddress("pezy_set_per_thread_stack_size");
+  constexpr size_t per_thread_stack = 0x0A00; // 2.5KB;
+  result = clExtSetPerThreadStackSize(kernel, per_thread_stack);
+  if (result != CL_SUCCESS) {
+    std::cerr << getErrorString(result) << std::endl;
+  }
 
   clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&memProb);
   clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&memRes);
