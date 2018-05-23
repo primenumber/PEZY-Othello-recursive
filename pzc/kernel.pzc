@@ -1,5 +1,4 @@
 #include "pzc_builtin.h"
-#include "../common/pzcperf.h"
 #include "../types.hpp"
 
 signed char max(signed char x, signed char y) {
@@ -120,9 +119,6 @@ struct Search {
   }
 };
 
-constexpr int MaxPerf = 4;
-PZCPerformance gPerf[MaxPerf];
-
 void pzc_Solve(const AlphaBetaProblem * const problems, int32_t * const results, const size_t n, char * const stack_area) {
   //if (get_tid() >= 4) return;
   const size_t offset = get_pid() * get_maxtid() + get_tid();
@@ -130,23 +126,11 @@ void pzc_Solve(const AlphaBetaProblem * const problems, int32_t * const results,
   // char * const local_stack = stack_area + stack_size * offset;
   // const int local_stack_addr = (int64_t)local_stack + stack_size;
   // asm volatile ("i.mov sp %0" :: "r"(local_stack_addr));
-  PZCPerformance stc, etc;
   for (size_t i = offset; i < n; i += get_maxpid() * get_maxtid()) {
     const AlphaBetaProblem& abp = problems[i];
     Search search = {abp.bd};
-    stc.Update();
     results[i] = search.alpha_beta(5, abp.alpha, abp.beta);
-    etc.Update();
-    if (i < MaxPerf) gPerf[i] = etc - stc;
   }
   flush();
 }
 
-void pzc_GetPerformance(PZCPerformance *out) {
-  if (get_tid() > 0 || get_pid() > 0) return;
-  for (int i = 0; i < MaxPerf; ++i) {
-    out[i] = gPerf[i];
-    gPerf[i].Clear();
-  }
-  flush();
-}
