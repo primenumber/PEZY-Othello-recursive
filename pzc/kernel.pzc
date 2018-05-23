@@ -70,7 +70,7 @@ uint64_t flip_impl(const Board& bd, int pos) {
   return flipped;
 }
 
-uint64_t flip(const Board& bd, int pos) {
+__attribute__((noinline)) uint64_t flip(const Board& bd, int pos) {
   return flip_impl<0>(bd, pos) | flip_impl<1>(bd, pos) | flip_impl<2>(bd, pos) | flip_impl<3>(bd, pos);
 }
 
