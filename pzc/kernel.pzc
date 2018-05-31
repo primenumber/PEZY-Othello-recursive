@@ -151,23 +151,27 @@ __attribute__((noinline)) uint64_t mobility_num(const Board bd) {
 }
 
 constexpr size_t max_mobility = 10;
-signed char alpha_beta_fastest_first(
-    Board bd, signed char alpha, signed char beta, bool passed_prev = false) {
-  char pos_ary[max_mobility];
+__attribute__((noinline)) void sort_nodes(const Board bd, char *pos_ary, int *mobility_count) {
   char cnt_ary[max_mobility];
-  int mobility_count = 0;
   for (uint64_t bits = empty(bd); bits; bits &= bits-1) {
     uint64_t bit = bits & -bits;
     int pos = ctz(bit);
     uint64_t flips = flip(bd, pos);
     if (flips) {
       Board next = move(bd, flips, pos);
-      pos_ary[mobility_count] = pos;
-      cnt_ary[mobility_count] = mobility_num(next);
-      ++mobility_count;
+      pos_ary[*mobility_count] = pos;
+      cnt_ary[*mobility_count] = mobility_num(next);
+      ++*mobility_count;
     }
   }
-  sort_by_key(pos_ary, cnt_ary, mobility_count);
+  sort_by_key(pos_ary, cnt_ary, *mobility_count);
+}
+
+signed char alpha_beta_fastest_first(
+    Board bd, signed char alpha, signed char beta, bool passed_prev = false) {
+  char pos_ary[max_mobility];
+  int mobility_count = 0;
+  sort_nodes(bd, pos_ary, &mobility_count);
   signed char result = -64;
   bool pass = true;
   for (size_t i = 0; i < mobility_count; ++i) {
